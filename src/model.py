@@ -119,21 +119,24 @@ class Encoder(torch.nn.Module):
         super(Encoder, self).__init__()
         self.base_model = base_model
         self.k = k
-        self.conv_1 = self.base_model(in_channels,  hidden_channels)
-        self.conv_0 = self.base_model(in_channels,  out_channels)
 
-        for i in range(2, 10):
-            exec("self.conv_%s = self.base_model( hidden_channels, hidden_channels )" % i)
+        self.conv_0 = self.base_model(in_channels,  out_channels)
+        self.conv_1 = self.base_model(in_channels,  hidden_channels)
+        self.conv_2 = self.base_model(hidden_channels, hidden_channels)
+        self.conv_3 = self.base_model(hidden_channels, hidden_channels)
+
+        # for i in range(2, self.k):
+        #     exec("self.conv_%s = self.base_model( hidden_channels, hidden_channels )" % i)
 
         self.conv_last_layer = self.base_model(hidden_channels, out_channels)
         self.conv_layers_list = [self.conv_1, self.conv_2, self.conv_3]
-        self.conv_layers_list.append(self.conv_last_layer)
+        # self.conv_layers_list.append(self.conv_last_layer)
         self.activation = activation
         self.prelu = nn.PReLU(out_channels)
-        self.lin0 = nn.Linear(in_channels, hidden_channels, bias=True)
-        self.lin1 = nn.Linear(hidden_channels, hidden_channels, bias=True)
-        self.lin2 = nn.Linear(hidden_channels, hidden_channels, bias=True)
-        self.lin3 = nn.Linear(hidden_channels, out_channels, bias=True)
+        # self.lin0 = nn.Linear(in_channels, hidden_channels, bias=True)
+        # self.lin1 = nn.Linear(hidden_channels, hidden_channels, bias=True)
+        # self.lin2 = nn.Linear(hidden_channels, hidden_channels, bias=True)
+        # self.lin3 = nn.Linear(hidden_channels, out_channels, bias=True)
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor):
         if self.k == 0:

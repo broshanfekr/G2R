@@ -28,7 +28,7 @@ def repeat(n_times):
 
 
 def prob_to_one_hot(y_pred):
-    ret = np.zeros(y_pred.shape, np.bool)
+    ret = np.zeros(y_pred.shape, bool)
     indices = np.argmax(y_pred, axis=1)
     for i in range(y_pred.shape[0]):
         ret[i][indices[i]] = True
@@ -57,7 +57,7 @@ def label_classification(embeddings, y, ratio = None, train_mask = None, test_ma
 
     clf = LogisticRegression(solver='lbfgs', multi_class='auto', max_iter=500).fit(X_train,  y_train.ravel() )
     onehot_encoder = OneHotEncoder(categories='auto').fit(Y)
-    y_test = onehot_encoder.transform(y_test).toarray().astype(np.bool)
+    y_test = onehot_encoder.transform(y_test).toarray().astype(bool)
 
     y_pred = clf.predict_proba(X_test)
     y_pred = prob_to_one_hot(y_pred)
