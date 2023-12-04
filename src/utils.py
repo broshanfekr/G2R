@@ -5,6 +5,8 @@ import numpy as np
 import torch
 import torch.nn
 import scipy.sparse as sp
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 
 
 def sort_dataset(data, labels, num_classes=10, stack=False):
@@ -30,6 +32,7 @@ def sort_dataset(data, labels, num_classes=10, stack=False):
         sorted_labels = np.hstack(sorted_labels)
     return sorted_data, sorted_labels
 
+
 def init_pipeline(model_dir, headers=None):
     """Initialize folder and .csv logger."""
     # project folder
@@ -43,6 +46,7 @@ def init_pipeline(model_dir, headers=None):
     create_csv(model_dir, 'losses.csv', headers)
     print("project dir: {}".format(model_dir))
 
+
 def create_csv(model_dir, filename, headers):
     """Create .csv file with filename in model_dir, with headers as the first line 
     of the csv. """
@@ -53,11 +57,13 @@ def create_csv(model_dir, filename, headers):
         f.write(','.join(map(str, headers)))
     return csv_path
 
+
 def save_params(model_dir, params):
     """Save params to a .json file. Params is a dictionary of parameters."""
     path = os.path.join(model_dir, 'params.json')
     with open(path, 'w') as f:
         json.dump(params, f, indent=2, sort_keys=True)
+
 
 def update_params(model_dir, pretrain_dir):
     """Updates architecture and feature dimension from pretrain directory 
@@ -68,12 +74,14 @@ def update_params(model_dir, pretrain_dir):
     params['fd'] = old_params['fd']
     save_params(model_dir, params)
 
+
 def load_params(model_dir):
     """Load params.json file in model directory and return dictionary."""
     _path = os.path.join(model_dir, "params.json")
     with open(_path, 'r') as f:
         _dict = json.load(f)
     return _dict
+
 
 def save_state(model_dir, *entries, filename='losses.csv'):
     """Save entries to csv. Entries is list of numbers. """
@@ -82,20 +90,24 @@ def save_state(model_dir, *entries, filename='losses.csv'):
     with open(csv_path, 'a') as f:
         f.write('\n'+','.join(map(str, entries)))
 
+
 def save_ckpt(model_dir, net, epoch):
     """Save PyTorch checkpoint to ./checkpoints/ directory in model directory. """
     torch.save(net.state_dict(), os.path.join(model_dir, 'checkpoints', 
         'model-epoch{}.pt'.format(epoch)))
+
 
 def save_labels(model_dir, labels, epoch):
     """Save labels of a certain epoch to directory. """
     path = os.path.join(model_dir, 'plabels', f'epoch{epoch}.npy')
     np.save(path, labels)
 
+
 def compute_accuracy(y_pred, y_true):
     """Compute accuracy by counting correct classification. """
     assert y_pred.shape == y_true.shape
     return 1 - np.count_nonzero(y_pred - y_true) / y_true.size
+
 
 def clustering_accuracy(labels_true, labels_pred):
     """Compute clustering accuracy."""
@@ -105,8 +117,6 @@ def clustering_accuracy(labels_true, labels_pred):
     value = supervised.contingency_matrix(labels_true, labels_pred)
     [r, c] = linear_sum_assignment(-value)
     return value[r, c].sum() / len(labels_true)
-
-
 
 
 def label_to_membership(targets, num_classes=None):
@@ -141,12 +151,14 @@ def membership_to_label(membership):
         labels[i] = np.argmax(membership[:, i, i])
     return labels
 
+
 def one_hot(labels_int, n_classes):
     """Turn labels into one hot vector of K classes. """
     labels_onehot = torch.zeros(size=(len(labels_int), n_classes)).float()
     for i, y in enumerate(labels_int):
         labels_onehot[i, y] = 1.
     return labels_onehot
+
 
 def sparse2coarse(targets):
     """CIFAR100 Coarse Labels. """
@@ -163,7 +175,6 @@ def index_to_mask(index, size):
     mask = torch.zeros(size, dtype=torch.bool, device=index.device)
     mask[index] = 1
     return mask
-
 
 
 def random_planetoid_splits(data, num_classes, lcc_mask = None):
@@ -288,3 +299,16 @@ def sparse_mx_to_torch_sparse_tensor(sparse_mx):
     values = torch.from_numpy(sparse_mx.data)
     shape = torch.Size(sparse_mx.shape)
     return torch.sparse.FloatTensor(indices, values, shape)
+
+
+def build_tsne_representation_fig(x, target, path):
+    # Apply t-SNE to reduce dimensionality to 2D
+    tsne = TSNE(n_components=2, random_state=42)
+    transformed_data = tsne.fit_transform(x)
+
+    # Visualize the 2D representation
+    plt.figure(figsize=(8, 6))
+    scatter = plt.scatter(transformed_data[:, 0], transformed_data[:, 1], c=target, cmap='viridis')
+    plt.legend(*scatter.legend_elements(), title='Classes')
+    plt.title('t-SNE Visualization of Digits Dataset')
+    plt.savefig(path)

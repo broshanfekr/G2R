@@ -12,7 +12,7 @@ class GCNConv(nn.Module):
                  cached=False,
                  has_bias=True,
                  normalize=True,
-                 dropout=0.,
+                 dropout=0.3,
                  **kwargs):
         super(GCNConv, self).__init__(**kwargs)
         
@@ -36,22 +36,9 @@ class GCNConv(nn.Module):
         if self.has_bias is not None:
             nn.init.zeros_(self.bias)
 
-    @staticmethod
-    def norm(A):
-        I = torch.eye(A.shape[0])
-        A = A + I
-
-        deg = torch.sum(A, dim=0)
-        deg_inv_sqrt = deg.pow(-0.5)
-        deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
-
-        norm_A = deg_inv_sqrt @ norm_A @ deg_inv_sqrt
-
-        return norm_A
-
     def forward(self, inputs, adj):
         x = inputs
-        # x = self.dropout(inputs)
+        x = self.dropout(inputs)
 
         # convolve
         pre_sup = torch.mm(x, self.weight)
@@ -89,22 +76,13 @@ class Encoder(torch.nn.Module):
         self.activation = activation
         self.prelu = nn.PReLU(out_channels)
 
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor):
+    def forward(self, x: torch.Tensor, A: torch.Tensor):
         if self.k == 0:
-            x = self.conv_0( x, edge_index )
+            x = self.conv_0(x, A)
             x = F.normalize(x, p=1)
             return x
         for i in range(0, self.k):
-            x = self.activation(self.conv_layers_list[i](x, edge_index))
-        x = self.conv_last_layer(x, edge_index)
+            x = self.activation(self.conv_layers_list[i](x, A))
+        x = self.conv_last_layer(x, A)
         x = F.normalize(x, p=1)
         return x
-
-
-class Model(torch.nn.Module):
-    def __init__(self,encoder: Encoder):
-        super(Model, self).__init__()
-        self.encoder: Encoder = encoder
-
-    def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
-        return self.encoder(x, edge_index)

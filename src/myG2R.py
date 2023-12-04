@@ -1,54 +1,51 @@
 import numpy as np
 from torch_geometric.utils import to_dense_adj
-from torch_geometric.nn.conv import MessagePassing
-from torch_geometric.utils import add_remaining_self_loops
-from torch_scatter import scatter_add
 from torch_geometric.datasets import Planetoid, CitationFull
 from torch_geometric.datasets import Planetoid
 from torch_geometric.datasets import Coauthor, Amazon
 import torch_geometric.transforms as T
-from torch.nn import Parameter
 import torch.nn.functional as F
 import torch.nn as nn
 import torch
-import math
 import argparse
 import os
-import logging
 
 from eval import label_classification
-# from mymodel import Model, GCNConv, Encoder
-from model import Model, GCNConv, Encoder
+from mymodel import GCNConv, Encoder
 
-from utils import random_coauthor_amazon_splits, random_planetoid_splits, normalize_adj_row, normalize_adj
+from utils import random_coauthor_amazon_splits, random_planetoid_splits, normalize_adj_row, normalize_adj, build_tsne_representation_fig
 
 from loss import GeometricMaximalCodingRateReduction as MaximalCodingRateReduction
 
 
-def train(model: Model, data, A, MaximalCodingRateReduction: MaximalCodingRateReduction):
+def train(model, data, A, A_hat, MaximalCodingRateReduction):
     x = data.x
-    edge_index = data.edge_index
     y = data.y
     num_classes = data.num_classes
 
     model.train()
     optimizer.zero_grad()
-    z = model(x, edge_index)
-    # z = model(x, A_hat)
+    z = model(x, A_hat)
 
     loss = MaximalCodingRateReduction(z, A)
-    # loss = MaximalCodingRateReduction(z, y, num_classes=num_classes)
+
     loss.backward()
     optimizer.step()
-    return loss.item()
+
+    return loss.item(), z
 
 
-def test(model: Model, x, edge_index, y, train_mask=None, test_mask=None):
+def test(model, data, A_hat, train_mask=None, test_mask=None):
+    x = data.x
+    y = data.y
+    num_classes = data.num_classes
+
     model.eval()
-    z = model(x, edge_index)
-    x = z.detach().cpu().numpy()
+
+    z = model(x, A_hat)
+
     res = label_classification(z, y, train_mask=train_mask, test_mask=test_mask)
-    return res
+    return res, z
 
 
 def build_graph(y):
@@ -171,12 +168,6 @@ if __name__ == '__main__':
     node_num = data.x.shape[0]
     num_features = data.x.shape[1]
 
-    # A = build_graph(data.y)
-    # sA = torch.from_numpy(A)
-    # edge_index = sA.nonzero().t().contiguous()
-    # data.edge_index = edge_index
-    # print(edge_index)
-
     # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     device = torch.device(args.cuda_idx if torch.cuda.is_available() else 'cpu')
     data = data.to(device)
@@ -185,10 +176,16 @@ if __name__ == '__main__':
     A = normalize_adj_row(A)
     A = torch.from_numpy(A.todense())
 
+    A_hat = to_dense_adj(data.edge_index)[0].cpu()
+    A_hat = A_hat + torch.eye(A_hat.shape[0])
+    A_hat = normalize_adj(A_hat)
+    A_hat = torch.from_numpy(A_hat.todense()).to(device)
 
-    encoder = Encoder(in_channels=num_features,out_channels=num_out, hidden_channels=num_hidden, 
+
+    model = Encoder(in_channels=num_features,out_channels=num_out, hidden_channels=num_hidden, 
                       activation=activation,base_model=base_model, k=args.num_layers).to(device)
-    model = Model(encoder=encoder).to(device)
+    
+    # model = Model(encoder=encoder).to(device)
     coding_rate_loss = MaximalCodingRateReduction(device=device, num_node_batch=args.num_node_batch, 
                                                   gam1=args.gam1, gam2=args.gam2, eps=args.eps).to(device)
     # coding_rate_loss = MaximalCodingRateReduction(gam1=args.gam1, gam2=args.gam2, eps=args.eps).to(device)
@@ -196,9 +193,12 @@ if __name__ == '__main__':
 
 
     for epoch in range(1, num_epochs + 1):
-        loss = train(model, data, A, coding_rate_loss)
-        train_acc = test(model, data.x, data.edge_index, data.y, train_mask=data.train_mask.cpu().numpy(), test_mask=data.train_mask.cpu().numpy())
-        val_res = test(model, data.x, data.edge_index, data.y, train_mask=data.train_mask.cpu().numpy(), test_mask=data.val_mask.cpu().numpy())
-        test_res = test(model, data.x, data.edge_index, data.y, train_mask=data.train_mask.cpu().numpy(), test_mask=data.test_mask.cpu().numpy())
-        print("Epoch: {:03d}, train_acc: {:.4f}, val_acc: {:.4f}, test_acc:{:.4f}".format(epoch, train_acc["acc"], val_res["acc"], test_res["acc"] ))
+        loss, z = train(model, data, A, A_hat, coding_rate_loss)
+        train_res, z = test(model, data, A_hat, train_mask=data.train_mask.cpu().numpy(), test_mask=data.train_mask.cpu().numpy())
+        val_res, z = test(model, data, A_hat, train_mask=data.train_mask.cpu().numpy(), test_mask=data.val_mask.cpu().numpy())
+        test_res, z = test(model, data, A_hat, train_mask=data.train_mask.cpu().numpy(), test_mask=data.test_mask.cpu().numpy())
+        print("Epoch: {:03d}, train_acc: {:.4f}, val_acc: {:.4f}, test_acc:{:.4f}".format(epoch, train_res["acc"], val_res["acc"], test_res["acc"] ))
 
+    x = z.detach().cpu().numpy()
+    build_tsne_representation_fig(x, target=data.y.cpu().numpy(), path="susegar.png")
+    
