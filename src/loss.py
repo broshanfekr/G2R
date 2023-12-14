@@ -99,7 +99,6 @@ class OrigMaximalCodingRateReduction(torch.nn.Module):
         return total_loss_empi
 
 
-
 class GeometricMaximalCodingRateReduction(torch.nn.Module):
     ## This function is based on https://github.com/ryanchankh/mcr2/blob/master/loss.py
     def __init__(self, device, num_node_batch, gam1=1.0, gam2=1.0, eps=0.01):
@@ -109,10 +108,6 @@ class GeometricMaximalCodingRateReduction(torch.nn.Module):
         self.eps = eps
         self.device = device
         self.num_node_batch = num_node_batch
-
-    def projection(self, z: torch.Tensor) -> torch.Tensor:
-        z = F.normalize(z, dim=0)
-        return z
 
     def compute_discrimn_loss_empirical(self, W):
         """Empirical Discriminative Loss."""
@@ -127,6 +122,8 @@ class GeometricMaximalCodingRateReduction(torch.nn.Module):
         p, m = W.shape
         k, _ = Pi.shape
         sum_trPi = torch.sum(Pi)
+        d_bar = sum_trPi/m
+        # d_bar = sum_trPi/k
 
         I = torch.eye(p).to(self.device)
         compress_loss = 0.
@@ -137,17 +134,88 @@ class GeometricMaximalCodingRateReduction(torch.nn.Module):
             a = a.T
             log_det = torch.logdet(I + scalar * a.matmul(W.T))
             compress_loss += log_det * trPi / m
-        num = Pi.shape[1]
-        compress_loss = compress_loss / 2 * (num / sum_trPi)
+
+        compress_loss = compress_loss / (2*d_bar)
         return compress_loss
 
     def forward(self, X, A):
         i = np.random.randint(A.shape[0], size=self.num_node_batch)
         A = A[i,::]
-        A = A.cpu().numpy()
         W = X.T
         Pi = A
-        Pi = torch.tensor(Pi, dtype=torch.float32).to(self.device)
+
+        discrimn_loss_empi = self.compute_discrimn_loss_empirical(W)
+        compress_loss_empi = self.compute_compress_loss_empirical_all(W, Pi)
+        total_loss_empi = - self.gam2 * discrimn_loss_empi + compress_loss_empi
+        return total_loss_empi
+    
+
+class GraphLearningLoss(torch.nn.Module):
+
+    def __init__(self, device, num_nodes, losslr1=1.0, losslr2=1.0):
+        super(GraphLearningLoss, self).__init__()
+        self.losslr1 = losslr1
+        self.losslr2 = losslr2
+        self.num_nodes = num_nodes
+        self.device = device
+
+    def forward(self, S, x):
+        L = torch.eye(self.num_nodes).to(self.device) - S
+        t1 = torch.mm(x.transpose(1, 0), L)
+        t1 = torch.trace(torch.mm(t1, x))
+
+        t2 = torch.trace(torch.mm(S.transpose(1, 0), S))
+
+        loss = (t1 * self.losslr1) + (t2 * self.losslr2)
+
+        return loss
+    
+
+
+class MyGeometricMaximalCodingRateReduction(torch.nn.Module):
+    ## This function is based on https://github.com/ryanchankh/mcr2/blob/master/loss.py
+    def __init__(self, device, num_node_batch, gam1=1.0, gam2=1.0, eps=0.01):
+        super(MyGeometricMaximalCodingRateReduction, self).__init__()
+        self.gam1 = gam1
+        self.gam2 = gam2
+        self.eps = eps
+        self.device = device
+        self.num_node_batch = num_node_batch
+
+    def compute_discrimn_loss_empirical(self, W):
+        """Empirical Discriminative Loss."""
+        p, m = W.shape
+        I = torch.eye(p).to(self.device)
+        scalar = p / (m * self.eps)
+        logdet = torch.logdet(I + self.gam1 * scalar * W.matmul(W.T))
+        return logdet / 2.
+
+    def compute_compress_loss_empirical_all(self, W, Pi):
+        """Empirical Compressive Loss."""
+        p, m = W.shape
+        k, _ = Pi.shape
+        sum_trPi = torch.sum(Pi)
+        d_bar = sum_trPi/m
+        # d_bar = sum_trPi/k
+
+        I = torch.eye(p).to(self.device)
+        compress_loss = 0.
+        for j in range(k):
+            trPi = torch.sum(Pi[j]) + 1e-8
+            scalar = p / (trPi * self.eps)
+            a = W.T * Pi[j].view(-1, 1)
+            a = a.T
+            log_det = torch.logdet(I + scalar * a.matmul(W.T))
+            compress_loss += log_det * trPi / m
+
+        compress_loss = compress_loss / (2*d_bar)
+        return compress_loss
+
+    def forward(self, X, A):
+        i = np.random.randint(A.shape[0], size=self.num_node_batch)
+        A = A[i,::]
+        W = X.T
+        Pi = A
 
         discrimn_loss_empi = self.compute_discrimn_loss_empirical(W)
         compress_loss_empi = self.compute_compress_loss_empirical_all(W, Pi)

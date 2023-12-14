@@ -2,6 +2,38 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+
+class GraphLearn(nn.Module):
+    def __init__(self, input_dim, output_dim, edges, num_nodes, bias, dropout=0., act=nn.ReLU()) -> None:
+        super(GraphLearn, self).__init__()
+
+        self.edges = edges
+        self.num_nodes = num_nodes
+        self.act = act
+        self.bias = bias
+
+        self.w = nn.Linear(input_dim, output_dim, bias=self.bias)
+        self.a = nn.Linear(output_dim, 1, bias=False)
+        self.dropout = nn.Dropout(p=dropout)
+
+    def forward(self, inputs):
+        x = self.dropout(inputs)
+
+        # graph learning
+        h = self.w(x)
+        N = self.num_nodes
+        first = torch.index_select(h, 0, self.edges[0])
+        sec = torch.index_select(h, 0, self.edges[1])
+
+        edge_v = torch.abs(first - sec)
+        edge_v = torch.squeeze(self.act(self.a(edge_v)))
+
+        graph = torch.sparse_coo_tensor(indices=self.edges, values=edge_v, size=[N, N])
+        graph = torch.sparse.softmax(graph, dim=1).to_dense()
+
+        return h, graph
+
+
 class GCNConv(nn.Module):
 
     def __init__(self,
@@ -76,4 +108,59 @@ class Encoder(torch.nn.Module):
             x = self.activation(self.conv_layers_list[i](x, A))
         x = self.conv_last_layer(x, A)
         x = F.normalize(x, p=1)
-        return x
+        return x, x, A
+    
+
+class MyEncoder(torch.nn.Module):
+    def __init__(self, 
+                 edges, 
+                 num_nodes, 
+                 input_dim, 
+                 output_dim, 
+                 hidden_gl_dim, 
+                 hidden_gcn_dim, 
+                 dropout,
+                 activation, 
+                 has_bias=True):
+        super().__init__()
+
+        self.edge = edges
+        self.num_nodes = num_nodes
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.hidden_gl_dim = hidden_gl_dim
+        self.hidden_gcn_dim = hidden_gcn_dim
+        self.has_bias = has_bias
+        self.dropout = dropout
+        self.activation = activation
+        self.prelu = nn.PReLU(output_dim)
+        
+        self.layers0 = GraphLearn(
+            input_dim=self.input_dim,
+            output_dim=self.hidden_gl_dim, 
+            edges=edges, 
+            num_nodes=self.num_nodes,
+            bias=self.has_bias,
+            dropout=self.dropout,
+            act=nn.ReLU()
+        )
+
+        self.layer1 = GCNConv(in_channels=self.input_dim,  
+                              out_channels=self.hidden_gcn_dim, 
+                              dropout=self.dropout, 
+                              has_bias=self.has_bias
+        )
+
+        self.layer2 = GCNConv(in_channels=self.hidden_gcn_dim, 
+                              out_channels=self.output_dim,
+                              dropout=self.dropout,
+                              has_bias=has_bias
+        )
+
+
+    def forward(self, x: torch.Tensor, A: torch.Tensor):
+        h, A_hat = self.layers0(x)
+        x = self.activation(self.layer1(x, A_hat))
+        x = self.layer2(x, A_hat)
+        x = F.normalize(x, p=1)
+        return x, h, A_hat
