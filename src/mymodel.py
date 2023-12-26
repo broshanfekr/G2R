@@ -4,17 +4,20 @@ import torch.nn.functional as F
 
 
 class GraphLearn(nn.Module):
-    def __init__(self, input_dim, output_dim, edges, num_nodes, bias, dropout=0., act=nn.ReLU()) -> None:
+    def __init__(self, input_dim, output_dim, edges, num_nodes, bias, device, dropout=0., act=nn.ReLU()) -> None:
         super(GraphLearn, self).__init__()
 
         self.edges = edges
         self.num_nodes = num_nodes
         self.act = act
         self.bias = bias
+        self.device = device
 
         self.w = nn.Linear(input_dim, output_dim, bias=self.bias)
         self.a = nn.Linear(output_dim, 1, bias=False)
         self.dropout = nn.Dropout(p=dropout)
+        self.device = device
+        self.eye = torch.eye(num_nodes).to(self.device)
 
     def forward(self, inputs):
         x = self.dropout(inputs)
@@ -30,6 +33,15 @@ class GraphLearn(nn.Module):
 
         graph = torch.sparse_coo_tensor(indices=self.edges, values=edge_v, size=[N, N])
         graph = torch.sparse.softmax(graph, dim=1).to_dense()
+        # graph = graph + self.eye
+
+        graph = (graph + graph.T)/2
+        graph = graph + self.eye
+        D = torch.sum(graph, dim=1)
+        D = torch.sqrt(D)
+        D = torch.diag(D)
+        D = torch.pinverse(D)
+        graph = torch.mm(torch.mm(D, graph), D)
 
         return h, graph
 
@@ -121,6 +133,7 @@ class MyEncoder(torch.nn.Module):
                  hidden_gcn_dim, 
                  dropout,
                  activation, 
+                 device,
                  has_bias=True):
         super().__init__()
 
@@ -134,12 +147,14 @@ class MyEncoder(torch.nn.Module):
         self.dropout = dropout
         self.activation = activation
         self.prelu = nn.PReLU(output_dim)
-        
+        self.device = device
+
         self.layers0 = GraphLearn(
             input_dim=self.input_dim,
             output_dim=self.hidden_gl_dim, 
             edges=edges, 
             num_nodes=self.num_nodes,
+            device=self.device,
             bias=self.has_bias,
             dropout=self.dropout,
             act=nn.ReLU()

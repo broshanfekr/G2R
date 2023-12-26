@@ -18,7 +18,8 @@ from loss import GraphLearningLoss
 
 def my_arg_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='Cora')
+    # parser.add_argument('--dataset', type=str, default='Cora')
+    parser.add_argument('--dataset', type=str, default='Synthetic')
     parser.add_argument('--dropout', type=float, default=0.3)
     parser.add_argument('--learning_rate', type=float, default=0.001)
     parser.add_argument("--hidden_gcn", type=int, default=1024, 
@@ -35,7 +36,7 @@ def my_arg_parser():
 
     parser.add_argument('--activation', type=str, default="relu")
     parser.add_argument('--has_bias', type=bool, default=True)
-    parser.add_argument('--num_epochs', type=int, default=20)
+    parser.add_argument('--num_epochs', type=int, default=40)
     parser.add_argument('--num_layers', type=int, default=1)
     parser.add_argument('--num_node_batch', type=int, default=768)
     parser.add_argument('--weight_decay', type=float, default=0.0001)
@@ -128,11 +129,21 @@ if __name__ == '__main__':
     A_hat = to_dense_adj(data.edge_index)[0].cpu()
 
     # y = data.y
+    # eliminated_edges = 0
     # for i, label in enumerate(y):
     #     suse = label != y
-    #     # print(torch.sum(A_hat[i]))
+
+    #     en1 = torch.sum(A_hat[i])
+    #     print(en1)
+
     #     A_hat[i, suse] = 0
-    #     # print(torch.sum(A_hat[i]))
+
+    #     en2 = torch.sum(A_hat[i])
+    #     print(en2)
+
+    #     eliminated_edges += abs(en1 - en2)
+
+    # print("number of eliminated edges is: {}".format(eliminated_edges))
 
     A_hat = A_hat + torch.eye(A_hat.shape[0])
     A_hat = utils.normalize_adj(A_hat)
@@ -155,7 +166,8 @@ if __name__ == '__main__':
                       hidden_gcn_dim=args.hidden_gcn,
                       dropout=args.dropout,
                       activation=activation,
-                      has_bias=args.has_bias
+                      has_bias=args.has_bias,
+                      device=device
     ).to(device)
     
     coding_rate_loss = MaximalCodingRateReduction(device=device, num_node_batch=args.num_node_batch, 
@@ -164,6 +176,7 @@ if __name__ == '__main__':
 
     optimizer = torch.optim.Adam(list(model.parameters()), lr=args.learning_rate, weight_decay=args.weight_decay)
 
+    res_list = []
     for epoch in range(1, args.num_epochs + 1):
         loss, z, gll, mcr2l, totalloss = train(model, data, A_hat, coding_rate_loss, gl_loss)
         train_res, val_res, test_res, z = test(model, data, A_hat, 
@@ -171,6 +184,14 @@ if __name__ == '__main__':
                                                val_mask=data.val_mask.cpu().numpy(),
                                                test_mask=data.test_mask.cpu().numpy())
         print("Epoch: {:03d}, gl_loss: {:.4f}, mcr2: {:.4f}, total_loss: {:.4f}, train_acc: {:.4f}, val_acc: {:.4f}, test_acc:{:.4f}".format(epoch, gll, mcr2l, totalloss, train_res["acc"], val_res["acc"], test_res["acc"] ))
+        res_list.append([epoch, gll.item(), mcr2l.item(), totalloss.item(), train_res["acc"].item(), val_res["acc"].item(), test_res["acc"].item()])
+    
+    res_list = np.asarray(res_list)
+
+    best_idx = np.argmax(res_list[:, 5])
+    row = res_list[best_idx, :]
+    print("\n\nbest result is: ")
+    print("Epoch: {:03d}, gl_loss: {:.4f}, mcr2: {:.4f}, total_loss: {:.4f}, train_acc: {:.4f}, val_acc: {:.4f}, test_acc:{:.4f}".format(int(row[0]), row[1], row[2], row[3], row[4], row[5], row[6]))
 
     x = z.detach().cpu().numpy()
     utils.build_tsne_representation_fig(x, target=data.y.cpu().numpy(), path="susegar.png")

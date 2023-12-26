@@ -1,7 +1,9 @@
+import numpy as np
 from torch_geometric.datasets import Planetoid, CitationFull
 from torch_geometric.datasets import Planetoid
 from torch_geometric.datasets import Coauthor, Amazon
 import torch_geometric.transforms as T
+import matplotlib.pyplot as plt
 
 import utils
 
@@ -57,8 +59,57 @@ def load_dataset(path, dataset_name, split_type):
         data = dataset[0]
         data.num_classes = dataset.num_classes
         data = utils.random_coauthor_amazon_splits(data, dataset.num_classes, lcc_mask=None)
+    elif dataset_name == "Synthetic":
+        pass
+    
     else:
         print("Input dataset name!!")
         raise NotImplementedError
     
     return data
+
+
+def generate_subspace_syntetich_data(ni, d, sigma, tetha):
+    """
+    Generate random data from 3 subspaces
+    input: Ni = number of samples on each subspace
+           d  = intrinsic dimension of each subspace
+           sigma= level of noise
+           tetha= angle between subspaces
+    output: X: generated data
+            labels: label of generated data
+    """
+    # generate base for each subspace
+    base_subspaces = [np.concatenate([np.eye(d), np.zeros([d, d])])]
+    base_subspaces.append(np.concatenate([np.cos(tetha) * np.eye(d), np.sin(tetha)*np.eye(d)]))
+    base_subspaces.append(np.concatenate([np.cos(tetha) * np.eye(d), -np.sin(tetha)*np.eye(d)]))
+
+    labels = []
+    X = []
+    for i in range(3):
+        temp = np.random.randn(d, ni)
+        X.append(base_subspaces[i] @ temp)  # + (-1)^(kk)*(kk-1);)
+        labels.append(ni*[i])
+    X = np.concatenate(X, axis=1)
+    labels = np.asarray(labels)
+
+    noise = np.random.randn(*X.shape)
+    noise = noise / np.sqrt(np.sum(noise ** 2, axis=0)).reshape(1, -1)
+
+    X = X + sigma*noise
+    X = X.T
+
+    plt.plot(X[0:100, 0], X[0:100, 1], '.', alpha=0.5, c='red')
+    plt.plot(X[100:200, 0], X[100:200, 1], '.', alpha=0.5, c='blue')
+    plt.plot(X[200:300, 0], X[200:300, 1], '.', alpha=0.5, c='green')
+    plt.axis('equal')
+    plt.grid()
+    plt.show()
+
+
+    return X, labels
+
+
+if __name__ == "__main__":
+
+    generate_subspace_syntetich_data(100, 1, 0.1, 2*np.pi/3)
