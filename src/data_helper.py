@@ -4,6 +4,7 @@ from torch_geometric.datasets import Planetoid
 from torch_geometric.datasets import Coauthor, Amazon
 import torch_geometric.transforms as T
 import matplotlib.pyplot as plt
+from torch_geometric.data import Data
 
 import utils
 
@@ -89,7 +90,7 @@ def generate_subspace_syntetich_data(ni, d, sigma, tetha):
     for i in range(3):
         temp = np.random.randn(d, ni)
         X.append(base_subspaces[i] @ temp)  # + (-1)^(kk)*(kk-1);)
-        labels.append(ni*[i])
+        labels.extend(ni*[i])
     X = np.concatenate(X, axis=1)
     labels = np.asarray(labels)
 
@@ -99,17 +100,18 @@ def generate_subspace_syntetich_data(ni, d, sigma, tetha):
     X = X + sigma*noise
     X = X.T
 
-    plt.plot(X[0:100, 0], X[0:100, 1], '.', alpha=0.5, c='red')
-    plt.plot(X[100:200, 0], X[100:200, 1], '.', alpha=0.5, c='blue')
-    plt.plot(X[200:300, 0], X[200:300, 1], '.', alpha=0.5, c='green')
-    plt.axis('equal')
-    plt.grid()
-    plt.show()
-
-
     return X, labels
 
 
 if __name__ == "__main__":
+    X, labels = generate_subspace_syntetich_data(100, 1, 0.1, 2*np.pi/3)
 
-    generate_subspace_syntetich_data(100, 1, 0.1, 2*np.pi/3)
+
+
+
+    colors = ["red", "blue", 'green']
+    for i, c in enumerate(colors):
+        plt.plot(X[labels == i, 0], X[labels == i, 1], '.', alpha=0.5, c=c)
+    plt.axis('equal')
+    plt.grid()
+    plt.show()
