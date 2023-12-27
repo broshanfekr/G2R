@@ -1,10 +1,12 @@
 import numpy as np
+import torch
 from torch_geometric.datasets import Planetoid, CitationFull
 from torch_geometric.datasets import Planetoid
 from torch_geometric.datasets import Coauthor, Amazon
 import torch_geometric.transforms as T
 import matplotlib.pyplot as plt
 from torch_geometric.data import Data
+import networkx as nx
 
 import utils
 
@@ -70,16 +72,24 @@ def load_dataset(path, dataset_name, split_type):
     return data
 
 
-def generate_subspace_syntetich_data(ni, d, sigma, tetha):
+def generate_subspace_graph_syntetich_data(ni, d, sigma, tetha, in_prob, out_prob):
     """
     Generate random data from 3 subspaces
     input: Ni = number of samples on each subspace
            d  = intrinsic dimension of each subspace
-           sigma= level of noise
-           tetha= angle between subspaces
+           sigma = level of noise
+           tetha = angle between subspaces
+           in_prob =
+           out_prob =
     output: X: generated data
             labels: label of generated data
     """
+
+    sizes = 3 * [ni]
+    probs = [[in_prob, out_prob, out_prob], [out_prob, in_prob, out_prob], [out_prob, out_prob, in_prob]]
+
+    G = nx.stochastic_block_model(sizes, probs, seed=0)
+
     # generate base for each subspace
     base_subspaces = [np.concatenate([np.eye(d), np.zeros([d, d])])]
     base_subspaces.append(np.concatenate([np.cos(tetha) * np.eye(d), np.sin(tetha)*np.eye(d)]))
@@ -100,14 +110,41 @@ def generate_subspace_syntetich_data(ni, d, sigma, tetha):
     X = X + sigma*noise
     X = X.T
 
-    return X, labels
+    return G, X, labels
 
 
 if __name__ == "__main__":
-    X, labels = generate_subspace_syntetich_data(100, 1, 0.1, 2*np.pi/3)
+    in_prob = 0.3
+    out_prob = 0.01
+    ni = 30
+    G, X, labels = generate_subspace_graph_syntetich_data(ni, 1, 0.1, 2*np.pi/3, in_prob, out_prob)
 
+    # pos = nx.spectral_layout(G)
+    pos = X
 
+    edge_index = torch.tensor([[*e] for e in G.edges], dtype=torch.long).T
+    X = torch.from_numpy(X)
+    labels = torch.from_numpy(labels)
+    pos = torch.from_numpy(pos)
 
+    data = Data(x=X, y=labels, edge_index=edge_index, pos=pos)
+
+    # pos = nx.spectral_layout(G)
+    pos = X
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+
+    nx.draw(G, pos=pos.numpy(),
+            ax=ax1,
+            with_labels=True,
+            font_weight='bold',
+            font_color='black',
+            font_size=10,
+            node_color=labels,
+            edge_color='gray',
+            linewidths=1,
+            alpha=0.7)
+
+    plt.show()
 
     colors = ["red", "blue", 'green']
     for i, c in enumerate(colors):
