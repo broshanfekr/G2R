@@ -7,8 +7,17 @@ import torch_geometric.transforms as T
 import matplotlib.pyplot as plt
 from torch_geometric.data import Data
 import networkx as nx
+from sklearn.model_selection import train_test_split
+import copy
 
 import utils
+
+
+def sample_mask(idx, l):
+    """Create mask."""
+    mask = np.zeros(l)
+    mask[idx] = 1
+    return np.array(mask, dtype=bool)
 
 
 def load_dataset(path, dataset_name, split_type):
@@ -63,8 +72,31 @@ def load_dataset(path, dataset_name, split_type):
         data.num_classes = dataset.num_classes
         data = utils.random_coauthor_amazon_splits(data, dataset.num_classes, lcc_mask=None)
     elif dataset_name == "Synthetic":
-        pass
-    
+        in_prob = 0.7
+        out_prob = 0.01
+        ni = 30
+        G, X, labels = generate_subspace_graph_syntetich_data(ni, 1, 0.1, 2 * np.pi / 3, in_prob, out_prob)
+
+        data_index = np.arange(labels.shape[0])
+        train_index, test_index = train_test_split(data_index, test_size=0.3, random_state=42)
+        val_index, test_index = train_test_split(test_index, test_size=0.33, random_state=42)
+        train_mask = sample_mask(train_index, labels.shape[0])
+        val_mask = sample_mask(val_index, labels.shape[0])
+        test_mask = sample_mask(test_index, labels.shape[0])
+        pos = copy.deepcopy(X)
+
+        edge_index = torch.tensor([[*e] for e in G.edges], dtype=torch.long).T
+        X = np.float32(X)
+        X = torch.from_numpy(X)
+        labels = torch.from_numpy(labels)
+        pos = torch.from_numpy(pos)
+
+        data = Data(x=X, y=labels, edge_index=edge_index, pos=pos)
+        data.num_classes = 3
+        data.train_mask = torch.from_numpy(train_mask)
+        data.val_mask = torch.from_numpy(val_mask)
+        data.test_mask = torch.from_numpy(test_mask)
+
     else:
         print("Input dataset name!!")
         raise NotImplementedError
@@ -119,6 +151,12 @@ if __name__ == "__main__":
     ni = 30
     G, X, labels = generate_subspace_graph_syntetich_data(ni, 1, 0.1, 2*np.pi/3, in_prob, out_prob)
 
+    data_index = np.arange(labels.shape[0])
+    train_index, test_index = train_test_split(data_index, test_size=0.3, random_state=42)
+    val_index, test_index = train_test_split(test_index, test_size=0.33, random_state=42)
+    train_mask = sample_mask(train_index, labels.shape[0])
+    val_mask = sample_mask(val_index, labels.shape[0])
+    test_mask = sample_mask(test_index, labels.shape[0])
     # pos = nx.spectral_layout(G)
     pos = X
 
@@ -144,11 +182,4 @@ if __name__ == "__main__":
             linewidths=1,
             alpha=0.7)
 
-    plt.show()
-
-    colors = ["red", "blue", 'green']
-    for i, c in enumerate(colors):
-        plt.plot(X[labels == i, 0], X[labels == i, 1], '.', alpha=0.5, c=c)
-    plt.axis('equal')
-    plt.grid()
     plt.show()

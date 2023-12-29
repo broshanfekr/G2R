@@ -100,7 +100,7 @@ class OrigMaximalCodingRateReduction(torch.nn.Module):
 
 
 class GeometricMaximalCodingRateReduction(torch.nn.Module):
-    ## This function is based on https://github.com/ryanchankh/mcr2/blob/master/loss.py
+    # This function is based on https://github.com/ryanchankh/mcr2/blob/master/loss.py
     def __init__(self, device, num_node_batch, gam1=1.0, gam2=1.0, eps=0.01):
         super(GeometricMaximalCodingRateReduction, self).__init__()
         self.gam1 = gam1
@@ -140,7 +140,7 @@ class GeometricMaximalCodingRateReduction(torch.nn.Module):
 
     def forward(self, X, A):
         i = np.random.randint(A.shape[0], size=self.num_node_batch)
-        A = A[i,::]
+        A = A[i, ::]
         W = X.T
         Pi = A
 
@@ -171,9 +171,8 @@ class GraphLearningLoss(torch.nn.Module):
         return loss
     
 
-
 class MyGeometricMaximalCodingRateReduction(torch.nn.Module):
-    ## This function is based on https://github.com/ryanchankh/mcr2/blob/master/loss.py
+    # This function is based on https://github.com/ryanchankh/mcr2/blob/master/loss.py
     def __init__(self, device, num_node_batch, gam1=1.0, gam2=1.0, eps=0.01):
         super(MyGeometricMaximalCodingRateReduction, self).__init__()
         self.gam1 = gam1
@@ -213,7 +212,7 @@ class MyGeometricMaximalCodingRateReduction(torch.nn.Module):
 
     def forward(self, X, A):
         i = np.random.randint(A.shape[0], size=self.num_node_batch)
-        A = A[i,::]
+        A = A[i, ::]
         W = X.T
         Pi = A
 

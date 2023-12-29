@@ -8,6 +8,8 @@ import scipy.sparse as sp
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 
+import networkx as nx
+
 
 def sort_dataset(data, labels, num_classes=10, stack=False):
     """Sort dataset based on classes.
@@ -312,3 +314,58 @@ def build_tsne_representation_fig(x, target, path):
     plt.legend(*scatter.legend_elements(), title='Classes')
     plt.title('t-SNE Visualization of Digits Dataset')
     plt.savefig(path)
+
+
+def draw_graph(G1, pos1, labels1, G2, pos2, labels2):
+    fig, ax = plt.subplots(2, 2)
+
+    nx.draw(G1, pos=pos1,
+            ax=ax[0, 0],
+            with_labels=True,
+            font_weight='bold',
+            font_color='black',
+            font_size=10,
+            node_color=labels1,
+            edge_color='gray',
+            linewidths=1,
+            alpha=0.7)
+    ax[0, 0].set_title('Ground truth')
+
+    nx.draw(G2, pos=pos2,
+            ax=ax[0, 1],
+            with_labels=True,
+            font_weight='bold',
+            font_color='black',
+            font_size=10,
+            node_color=labels2,
+            edge_color='gray',
+            linewidths=1,
+            alpha=0.7)
+    ax[0, 1].set_title('predicted pos and predicted labels')
+
+    nx.draw(G2, pos=pos1,
+            ax=ax[1, 0],
+            with_labels=True,
+            font_weight='bold',
+            font_color='black',
+            font_size=10,
+            node_color=labels2,
+            edge_color='gray',
+            linewidths=1,
+            alpha=0.7)
+    ax[1, 0].set_title('init pos and predicted labels')
+
+    nx.draw(G2, pos=pos2,
+            ax=ax[1, 1],
+            with_labels=True,
+            font_weight='bold',
+            font_color='black',
+            font_size=10,
+            node_color=labels1,
+            edge_color='gray',
+            linewidths=1,
+            alpha=0.7)
+    ax[1, 1].set_title('predicted pos and true labels')
+
+
+    plt.show()

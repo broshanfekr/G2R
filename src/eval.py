@@ -47,7 +47,7 @@ def print_statistics(statistics, function_name):
             print()
 
 
-def label_classification(embeddings, y, ratio = None, train_mask = None, test_mask = None, val_mask = None):
+def label_classification(embeddings, y, ratio=None, train_mask=None, val_mask=None, test_mask=None):
     X = embeddings.detach().cpu().numpy()
     Y = y.detach().cpu().numpy()
     Y = Y.reshape(-1, 1)
@@ -64,10 +64,22 @@ def label_classification(embeddings, y, ratio = None, train_mask = None, test_ma
 
     micro = f1_score(y_test, y_pred, average="micro")
     macro = f1_score(y_test, y_pred, average="macro")
-    acc = accuracy_score( y_test, y_pred, )
+    acc = accuracy_score(y_test, y_pred)
 
     return {
         'F1Mi': micro,
         'F1Ma': macro,
         "acc" : acc
     }
+
+
+def classify_with_lr(X, Y, train_mask=None, val_mask=None, test_mask=None):
+    Y = Y.reshape(-1, 1)
+
+    X = normalize(X, norm='l2')
+    X_train, X_test, y_train, y_test = X[train_mask], X[test_mask], Y[train_mask], Y[test_mask]
+
+    clf = LogisticRegression(solver='lbfgs', multi_class='auto', max_iter=500).fit(X_train, y_train.ravel())
+    y_pred = clf.predict(X)
+
+    return y_pred

@@ -6,8 +6,10 @@ import torch.nn as nn
 import torch
 import os
 import argparse
+import networkx as nx
+from cdlib import algorithms
 
-from eval import label_classification
+from eval import label_classification, classify_with_lr
 from mymodel import GCNConv, Encoder, MyEncoder
 
 import utils
@@ -18,15 +20,19 @@ from loss import GraphLearningLoss
 
 def my_arg_parser():
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--dataset', type=str, default='Cora')
-    parser.add_argument('--dataset', type=str, default='Synthetic')
+    parser.add_argument('--dataset', type=str, default='Cora')
+    # parser.add_argument('--dataset', type=str, default='Synthetic')
     parser.add_argument('--dropout', type=float, default=0.3)
     parser.add_argument('--learning_rate', type=float, default=0.001)
-    parser.add_argument("--hidden_gcn", type=int, default=1024, 
-                        help="Number of units in GCN hidden layer.")
-    parser.add_argument("--hidden_gl", type=int, default=70,
-                        help="Number of units in GraphLearning hidden layer.")
-    parser.add_argument('--num_out', type=int, default=512)
+
+    # parser.add_argument("--hidden_gcn", type=int, default=1024, help="Number of units in GCN hidden layer.")
+    # parser.add_argument("--hidden_gl", type=int, default=70, help="Number of units in GraphLearning hidden layer.")
+    # parser.add_argument('--num_out', type=int, default=512)
+
+    parser.add_argument("--hidden_gcn", type=int, default=2, help="Number of units in GCN hidden layer.")
+    parser.add_argument("--hidden_gl", type=int, default=2, help="Number of units in GraphLearning hidden layer.")
+    parser.add_argument('--num_out', type=int, default=2)
+
     parser.add_argument('--gam1', type=float, default=0.5)
     parser.add_argument('--gam2', type=float, default=0.5)
     parser.add_argument('--eps', type=float, default=0.05)
@@ -38,7 +44,7 @@ def my_arg_parser():
     parser.add_argument('--has_bias', type=bool, default=True)
     parser.add_argument('--num_epochs', type=int, default=40)
     parser.add_argument('--num_layers', type=int, default=1)
-    parser.add_argument('--num_node_batch', type=int, default=768)
+    parser.add_argument('--num_node_batch', type=int, default=40)
     parser.add_argument('--weight_decay', type=float, default=0.0001)
     parser.add_argument('--input_dir', type=str, default="../data")
     parser.add_argument('--seed', type=int, default=21415)
@@ -52,13 +58,18 @@ def my_arg_parser():
 
 def train(model, data, A_hat, MaximalCodingRateReduction, gl_loss):
     x = data.x
-    y = data.y
-    num_classes = data.num_classes
+    # y = data.y
+    # num_classes = data.num_classes
 
     model.train()
     
     optimizer.zero_grad()
     z, h, S = model(x, A_hat)
+
+    # apply an overlapping clustering algorithm
+    # G = nx.from_numpy_array(S.cpu().detach().numpy())
+    # coms = algorithms.core_expansion(G)
+    # # y =
 
     l1 = gl_loss(S, z)
     l2 = MaximalCodingRateReduction(z, S)
@@ -85,7 +96,7 @@ def test(model, data, A_hat, train_mask, val_mask, test_mask):
     val_res = label_classification(z, y, train_mask=train_mask, test_mask=val_mask)
     test_res = label_classification(z, y, train_mask=train_mask, test_mask=test_mask)
 
-    return train_res, val_res, test_res, z
+    return train_res, val_res, test_res, z, S
 
 
 def build_graph(y):
@@ -147,6 +158,8 @@ if __name__ == '__main__':
 
     A_hat = A_hat + torch.eye(A_hat.shape[0])
     A_hat = utils.normalize_adj(A_hat)
+    init_graph = nx.from_numpy_array(A_hat.todense())
+    init_pos = data.pos
     A_hat = torch.from_numpy(A_hat.todense()).to(device)
 
     # model = Encoder(in_channels=num_features,
@@ -179,15 +192,24 @@ if __name__ == '__main__':
     res_list = []
     for epoch in range(1, args.num_epochs + 1):
         loss, z, gll, mcr2l, totalloss = train(model, data, A_hat, coding_rate_loss, gl_loss)
-        train_res, val_res, test_res, z = test(model, data, A_hat, 
-                                               train_mask=data.train_mask.cpu().numpy(),
-                                               val_mask=data.val_mask.cpu().numpy(),
-                                               test_mask=data.test_mask.cpu().numpy())
+        train_res, val_res, test_res, z, S = test(model, data, A_hat,
+                                                  train_mask=data.train_mask.cpu().numpy(),
+                                                  val_mask=data.val_mask.cpu().numpy(),
+                                                  test_mask=data.test_mask.cpu().numpy())
         print("Epoch: {:03d}, gl_loss: {:.4f}, mcr2: {:.4f}, total_loss: {:.4f}, train_acc: {:.4f}, val_acc: {:.4f}, test_acc:{:.4f}".format(epoch, gll, mcr2l, totalloss, train_res["acc"], val_res["acc"], test_res["acc"] ))
         res_list.append([epoch, gll.item(), mcr2l.item(), totalloss.item(), train_res["acc"].item(), val_res["acc"].item(), test_res["acc"].item()])
+
+        if False and (epoch % 10 == 0 or epoch == args.num_epochs or False):
+            current_graph = nx.from_numpy_array(S.cpu().detach().numpy())
+            test_res = classify_with_lr(z.cpu().detach().numpy(),
+                                        data.y.detach().cpu().numpy(),
+                                        train_mask=data.train_mask.cpu().numpy(),
+                                        val_mask=data.val_mask.cpu().numpy(),
+                                        test_mask=data.test_mask.cpu().numpy())
+            utils.draw_graph(init_graph, init_pos.detach().numpy(), data.y.detach().cpu().numpy(),
+                             current_graph, z.cpu().detach().numpy(), test_res)
     
     res_list = np.asarray(res_list)
-
     best_idx = np.argmax(res_list[:, 5])
     row = res_list[best_idx, :]
     print("\n\nbest result is: ")
