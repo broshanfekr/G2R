@@ -20,8 +20,8 @@ from loss import GraphLearningLoss
 
 def my_arg_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='Cora')
-    # parser.add_argument('--dataset', type=str, default='Synthetic')
+    # parser.add_argument('--dataset', type=str, default='Cora')
+    parser.add_argument('--dataset', type=str, default='Synthetic')
     parser.add_argument('--dropout', type=float, default=0.3)
     parser.add_argument('--learning_rate', type=float, default=0.001)
 
@@ -67,9 +67,9 @@ def train(model, data, A_hat, MaximalCodingRateReduction, gl_loss):
     z, h, S = model(x, A_hat)
 
     # apply an overlapping clustering algorithm
-    # G = nx.from_numpy_array(S.cpu().detach().numpy())
-    # coms = algorithms.core_expansion(G)
-    # # y =
+    G = nx.from_numpy_array(S.cpu().detach().numpy())
+    coms = algorithms.core_expansion(G)
+    # y =
 
     l1 = gl_loss(S, z)
     l2 = MaximalCodingRateReduction(z, S)

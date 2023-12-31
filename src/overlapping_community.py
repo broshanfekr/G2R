@@ -69,7 +69,7 @@ nx.draw(G, pos=pos,
         alpha=0.7)
 ax2.set_title('predicted partitions')
 
-plt.show()
+plt.savefig("GMCR2.png")
 
 print("the end")
 
