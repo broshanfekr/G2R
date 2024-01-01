@@ -32,6 +32,26 @@ def label_to_membership(targets, num_classes=None):
     return Pi
 
 
+def cluster_to_membership(cluster_list, num_nodes):
+    """
+    Generate a membership matrix, and assign value to current Pi.
+
+    Parameters: 
+        cluster_list: a list containing different clusters in the graph
+
+    Return: 
+        Pi: membership matrix, shape (num_clusters, num_nodes, num_nodes)
+    """
+    num_clusters = len(cluster_list)
+
+    Pi = np.zeros(shape=[num_clusters, num_nodes, num_nodes])
+    for i, c in enumerate(cluster_list):
+        Pi[i, c, c] = 1.0
+    return Pi
+
+
+
+
 class OrigMaximalCodingRateReduction(torch.nn.Module):
     def __init__(self, device, num_node_batch, gam1=1.0, gam2=1.0, eps=0.01):
         super(OrigMaximalCodingRateReduction, self).__init__()
@@ -192,7 +212,8 @@ class MyGeometricMaximalCodingRateReduction(torch.nn.Module):
     def compute_compress_loss_empirical_all(self, W, Pi):
         """Empirical Compressive Loss."""
         p, m = W.shape
-        k, _ = Pi.shape
+        k, _, _ = Pi.shape
+
         sum_trPi = torch.sum(Pi)
         d_bar = sum_trPi/m
         # d_bar = sum_trPi/k
@@ -202,19 +223,24 @@ class MyGeometricMaximalCodingRateReduction(torch.nn.Module):
         for j in range(k):
             trPi = torch.sum(Pi[j]) + 1e-8
             scalar = p / (trPi * self.eps)
-            a = W.T * Pi[j].view(-1, 1)
-            a = a.T
-            log_det = torch.logdet(I + scalar * a.matmul(W.T))
+            # a = W.T * Pi[j].view(-1, 1)
+            # a = a.T
+            # log_det = torch.logdet(I + scalar * a.matmul(W.T))
+            log_det = torch.logdet(I + scalar * W.matmul(Pi[j]).matmul(W.T))
             compress_loss += log_det * trPi / m
 
         compress_loss = compress_loss / (2*d_bar)
         return compress_loss
 
-    def forward(self, X, A):
-        i = np.random.randint(A.shape[0], size=self.num_node_batch)
-        A = A[i, ::]
+    def forward(self, X, A, cluster_list):
+        # i = np.random.randint(A.shape[0], size=self.num_node_batch)
+        # A = A[i, ::]
+        # W = X.T
+        # Pi = A
+
+        Pi = cluster_to_membership(cluster_list=cluster_list, num_nodes=A.shape[0])
+        Pi = torch.tensor(Pi, dtype=torch.float32).to(self.device)
         W = X.T
-        Pi = A
 
         discrimn_loss_empi = self.compute_discrimn_loss_empirical(W)
         compress_loss_empi = self.compute_compress_loss_empirical_all(W, Pi)

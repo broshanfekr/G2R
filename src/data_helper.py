@@ -71,11 +71,17 @@ def load_dataset(path, dataset_name, split_type):
         data = dataset[0]
         data.num_classes = dataset.num_classes
         data = utils.random_coauthor_amazon_splits(data, dataset.num_classes, lcc_mask=None)
+
     elif dataset_name == "Synthetic":
         in_prob = 0.7
         out_prob = 0.01
         ni = 30
-        G, X, labels = generate_subspace_graph_syntetich_data(ni, 1, 0.1, 2 * np.pi / 3, in_prob, out_prob)
+        cluster_num = 2
+        angle = np.pi/4  #2*np.pi/3
+        intrinsic_dim = 1
+        noise_sigma = 0.1
+
+        G, X, labels = generate_subspace_graph_syntetich_data(ni, intrinsic_dim, noise_sigma, angle, in_prob, out_prob, cluster_num)
 
         data_index = np.arange(labels.shape[0])
         train_index, test_index = train_test_split(data_index, test_size=0.3, random_state=42)
@@ -104,7 +110,7 @@ def load_dataset(path, dataset_name, split_type):
     return data
 
 
-def generate_subspace_graph_syntetich_data(ni, d, sigma, tetha, in_prob, out_prob):
+def generate_subspace_graph_syntetich_data(ni, d, sigma, tetha, in_prob, out_prob, cluster_num):
     """
     Generate random data from 3 subspaces
     input: Ni = number of samples on each subspace
@@ -117,19 +123,28 @@ def generate_subspace_graph_syntetich_data(ni, d, sigma, tetha, in_prob, out_pro
             labels: label of generated data
     """
 
-    sizes = 3 * [ni]
-    probs = [[in_prob, out_prob, out_prob], [out_prob, in_prob, out_prob], [out_prob, out_prob, in_prob]]
+    sizes = cluster_num * [ni]
+    temp_p = [in_prob] + (cluster_num-1) * [out_prob]
+    probs = [temp_p]
+    for i in range(1, cluster_num):
+        temp_p = temp_p[:]
+        temp_p[i] = in_prob
+        temp_p[i-1] = out_prob
+        probs.append(temp_p)
+
+    # probs = [[in_prob, out_prob, out_prob], [out_prob, in_prob, out_prob], [out_prob, out_prob, in_prob]]
 
     G = nx.stochastic_block_model(sizes, probs, seed=0)
 
     # generate base for each subspace
     base_subspaces = [np.concatenate([np.eye(d), np.zeros([d, d])])]
     base_subspaces.append(np.concatenate([np.cos(tetha) * np.eye(d), np.sin(tetha)*np.eye(d)]))
-    base_subspaces.append(np.concatenate([np.cos(tetha) * np.eye(d), -np.sin(tetha)*np.eye(d)]))
+    if cluster_num == 3:
+        base_subspaces.append(np.concatenate([np.cos(tetha) * np.eye(d), -np.sin(tetha)*np.eye(d)]))
 
     labels = []
     X = []
-    for i in range(3):
+    for i in range(cluster_num):
         temp = np.random.randn(d, ni)
         X.append(base_subspaces[i] @ temp)  # + (-1)^(kk)*(kk-1);)
         labels.extend(ni*[i])

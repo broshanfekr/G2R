@@ -367,5 +367,4 @@ def draw_graph(G1, pos1, labels1, G2, pos2, labels2):
             alpha=0.7)
     ax[1, 1].set_title('predicted pos and true labels')
 
-
-    plt.show()
+    plt.savefig("GMCR2.png")

@@ -68,11 +68,11 @@ def train(model, data, A_hat, MaximalCodingRateReduction, gl_loss):
 
     # apply an overlapping clustering algorithm
     G = nx.from_numpy_array(S.cpu().detach().numpy())
-    coms = algorithms.core_expansion(G)
+    coms = algorithms.core_expansion(G).communities
     # y =
 
     l1 = gl_loss(S, z)
-    l2 = MaximalCodingRateReduction(z, S)
+    l2 = MaximalCodingRateReduction(z, S, coms)
 
     alpha1 = 2
     loss = alpha1*l1 + l2
@@ -80,7 +80,7 @@ def train(model, data, A_hat, MaximalCodingRateReduction, gl_loss):
     loss.backward()
     optimizer.step()
 
-    return loss.item(), z, alpha1*l1, l2, loss
+    return loss.item(), alpha1*l1.item(), l2.item()
 
 
 def test(model, data, A_hat, train_mask, val_mask, test_mask):
@@ -96,7 +96,7 @@ def test(model, data, A_hat, train_mask, val_mask, test_mask):
     val_res = label_classification(z, y, train_mask=train_mask, test_mask=val_mask)
     test_res = label_classification(z, y, train_mask=train_mask, test_mask=test_mask)
 
-    return train_res, val_res, test_res, z, S
+    return train_res, val_res, test_res, z.cpu().detach().numpy(), S.cpu().detach().numpy()
 
 
 def build_graph(y):
@@ -191,23 +191,23 @@ if __name__ == '__main__':
 
     res_list = []
     for epoch in range(1, args.num_epochs + 1):
-        loss, z, gll, mcr2l, totalloss = train(model, data, A_hat, coding_rate_loss, gl_loss)
+        loss, gll, mcr2l = train(model, data, A_hat, coding_rate_loss, gl_loss)
         train_res, val_res, test_res, z, S = test(model, data, A_hat,
                                                   train_mask=data.train_mask.cpu().numpy(),
                                                   val_mask=data.val_mask.cpu().numpy(),
                                                   test_mask=data.test_mask.cpu().numpy())
-        print("Epoch: {:03d}, gl_loss: {:.4f}, mcr2: {:.4f}, total_loss: {:.4f}, train_acc: {:.4f}, val_acc: {:.4f}, test_acc:{:.4f}".format(epoch, gll, mcr2l, totalloss, train_res["acc"], val_res["acc"], test_res["acc"] ))
-        res_list.append([epoch, gll.item(), mcr2l.item(), totalloss.item(), train_res["acc"].item(), val_res["acc"].item(), test_res["acc"].item()])
+        
+        res_template = "Epoch: {:03d}, gl_loss: {:.4f}, mcr2: {:.4f}, total_loss: {:.4f}, train_acc: {:.4f}, val_acc: {:.4f}, test_acc:{:.4f}"
+        print(res_template.format(epoch, gll, mcr2l, loss, train_res["acc"], val_res["acc"], test_res["acc"] ))
+        res_list.append([epoch, gll, mcr2l, loss, train_res["acc"].item(), val_res["acc"].item(), test_res["acc"].item()])
 
-        if False and (epoch % 10 == 0 or epoch == args.num_epochs or False):
-            current_graph = nx.from_numpy_array(S.cpu().detach().numpy())
-            test_res = classify_with_lr(z.cpu().detach().numpy(),
-                                        data.y.detach().cpu().numpy(),
+        if True and (epoch % 10 == 0 or epoch == args.num_epochs or False):
+            current_graph = nx.from_numpy_array(S)
+            test_res = classify_with_lr(z, data.y.detach().cpu().numpy(),
                                         train_mask=data.train_mask.cpu().numpy(),
                                         val_mask=data.val_mask.cpu().numpy(),
                                         test_mask=data.test_mask.cpu().numpy())
-            utils.draw_graph(init_graph, init_pos.detach().numpy(), data.y.detach().cpu().numpy(),
-                             current_graph, z.cpu().detach().numpy(), test_res)
+            utils.draw_graph(init_graph, init_pos.detach().numpy(), data.y.detach().cpu().numpy(), current_graph, z, test_res)
     
     res_list = np.asarray(res_list)
     best_idx = np.argmax(res_list[:, 5])
@@ -215,6 +215,5 @@ if __name__ == '__main__':
     print("\n\nbest result is: ")
     print("Epoch: {:03d}, gl_loss: {:.4f}, mcr2: {:.4f}, total_loss: {:.4f}, train_acc: {:.4f}, val_acc: {:.4f}, test_acc:{:.4f}".format(int(row[0]), row[1], row[2], row[3], row[4], row[5], row[6]))
 
-    x = z.detach().cpu().numpy()
-    utils.build_tsne_representation_fig(x, target=data.y.cpu().numpy(), path="susegar.png")
+    utils.build_tsne_representation_fig(z, target=data.y.cpu().numpy(), path="susegar.png")
     
